@@ -76,7 +76,18 @@
       color: #666;
       font-size: 13px;
     }
+
+    /* pequenas melhorias visuais para os canvases */
+    canvas {
+      max-width: 100%;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    }
   </style>
+
+  <!-- Biblioteca para gráfico (Chart.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -98,42 +109,41 @@
 
     <!-- Bloco de resultados 1 -->
     <div>
-      <div class="result yellow" id = "C11_out">--</div>
-      <div class="result yellow" id = "C13_out">--</div>
+      <div class="result yellow" id="C11_out">--</div>
+      <div class="result yellow" id="C13_out">--</div>
     </div>
 
     <!-- Figura -->
-    <img src="paralelo.png" width="300">
+    <img src="paralelo.png" width="300" alt="Paralelo">
 
     <!-- Bloco de resultados 2 -->
     <div>
-      <div class="result yellow" id = "C12_out">--</div>
-      <div class="result yellow" id = "outC14_copy">--</div>
+      <div class="result yellow" id="C12_out">--</div>
+      <div class="result yellow" id="outC14_copy">--</div>
     </div>
 
   </div>
 
-<h3>Escoamento Contracorrente</h3>
+  <h3>Escoamento Contracorrente</h3>
 
   <div style="display:flex; align-items:center; gap:20px; margin:20px 0;">
 
     <!-- Bloco de resultados 1 -->
     <div>
-      <div class="result yellow" id = "C11_out1">--</div>
-      <div class="result yellow" id = "C13_out1">--</div>
+      <div class="result yellow" id="C11_out1">--</div>
+      <div class="result yellow" id="C13_out1">--</div>
     </div>
 
     <!-- Figura -->
-    <img src="contracorrente.png" width="300">
+    <img src="contracorrente.png" width="300" alt="Contracorrente">
 
     <!-- Bloco de resultados 2 -->
     <div>
-      <div class="result yellow" id = "C12_out1">--</div>
-      <div class="result yellow" id = "outJ14_copy">--</div>
+      <div class="result yellow" id="C12_out1">--</div>
+      <div class="result yellow" id="outJ14_copy">--</div>
     </div>
 
   </div>
-
 
   <!-- Entradas -->
   <div class="grid" id="form">
@@ -184,6 +194,12 @@
 
   </div>
 
+  <h3>Gráfico — Perfil Térmico (Paralelo)</h3>
+  <canvas id="grafParalelo" height="160"></canvas>
+
+  <h3>Gráfico — Perfil Térmico (Contracorrente)</h3>
+  <canvas id="grafContra" height="160"></canvas>
+
   <p class="muted">
     Observação: implementei as fórmulas conforme a planilha (algumas células do lado J referenciam células C na planilha original).
   </p>
@@ -191,15 +207,22 @@
 </div>
 
 <script>
+  // ======= Funções utilitárias =======
   function num(id) {
-    return parseFloat(document.getElementById(id).value) || 0;
+    const el = document.getElementById(id);
+    if (!el) return 0;
+    // inputs usam .value, divs usam innerText
+    if ('value' in el) return parseFloat(el.value) || 0;
+    return parseFloat(el.innerText) || 0;
   }
 
   function setText(id, v) {
-    document.getElementById(id).innerText =
-      (isFinite(v) ? Number(v).toFixed(6) : v);
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerText = (isFinite(v) ? Number(v).toFixed(6) : v);
   }
 
+  // ======= Função calcular (mantida conforme opção A) =======
   function calcular() {
     // Entradas C
     const C11 = num('C11'), C12 = num('C12'), C13 = num('C13');
@@ -224,7 +247,7 @@
     const C23 = (C20 !== 0 && F11 !== 0) ? (C22 / (C20 * F11)) : NaN;
     const C24 = (C21 !== 0) ? (C23 / (C21 * Math.PI)) : NaN;
 
-    // Cálculos lado J
+    // Cálculos lado J (opção A: manter igual à planilha => usa variáveis C conforme seu código)
     const J14 = C13 - ((C16 * C18 * (C12 - C11)) / (C19 * C17));
     const L11 = Math.abs(J11 - J14);
     const L13 = Math.abs(J12 - J13);
@@ -239,7 +262,7 @@
 
     // Saída
     setText('outC14', C14);
-    setText('outC14_copy', C14);
+    setText('outC14_copy', C14); // mantém seu ID complementar
     setText('outJ14', J14);
     setText('outJ14_copy', J14);
     setText('F11', F11);
@@ -250,9 +273,124 @@
     setText('outJ24', J24);
   }
 
+  // ======= Gráficos (Chart.js) =======
+  let grafParalelo = null;
+  let grafContra = null;
+
+  function atualizarGraficos() {
+    // Paralelo
+    const Lc = parseFloat(document.getElementById("outC24").innerText) || 0;
+    const Tc_in = num("C13");  // conforme seu mapeamento original
+    const Tc_out = parseFloat(document.getElementById("outC14").innerText) || 0;
+    const Tf_in = num("C11");
+    const Tf_out = num("C12");
+
+
+    // Só desenha se tivermos comprimento > 0 e temperaturas válidas
+    if (Lc > 0 && !isNaN(Tc_in) && !isNaN(Tf_in)) {
+      const xp = [0, Lc/2, Lc];
+      const quenteP = [Tc_in, (Tc_in + Tc_out)/2, Tc_out];
+      const frioP   = [Tf_in, (Tf_in + Tf_out)/2, Tf_out];
+
+      if (grafParalelo) grafParalelo.destroy();
+
+      const ctxP = document.getElementById("grafParalelo").getContext("2d");
+      grafParalelo = new Chart(ctxP, {
+        type: "line",
+        data: {
+          labels: xp,
+          datasets: [
+            { label: "Fluido Quente", data: quenteP, borderWidth: 2, tension: 0.2, borderColor: "rgb(220,53,69)", backgroundColor: "rgba(220,53,69,0.05)" },
+            { label: "Fluido Frio",   data: frioP,   borderWidth: 2, tension: 0.2, borderColor: "rgb(13,110,253)", backgroundColor: "rgba(13,110,253,0.05)" }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'top' } },
+          scales: {
+            x: { title: { display: true, text: "Comprimento (m)" } },
+            y: { title: { display: true, text: "Temperatura (°C)" } }
+          }
+        }
+      });
+    } else {
+      // se quiser, pode limpar o canvas quando não há dados
+      if (grafParalelo) {
+        grafParalelo.destroy();
+        grafParalelo = null;
+      }
+    }
+
+    // Contracorrente
+    const Lj = parseFloat(document.getElementById("outJ24").innerText) || 0;
+    const Tq_in = num("C13");
+    const Tq_out = parseFloat(document.getElementById("outJ14").innerText) || 0;
+    const Tf_in2 = num("J11");
+    const Tf_out2 = num("C12");
+
+    if (Lj > 0 && !isNaN(Tq_in) && !isNaN(Tf_in2)) {
+      const xj = [0, Lj/2, Lj];
+      const quenteC = [Tq_in, (Tq_in + Tq_out)/2, Tq_out];
+      const frioC   = [Tf_in2, (Tf_in2 + Tf_out2)/2, Tf_out2];
+
+      if (grafContra) grafContra.destroy();
+
+      const ctxC = document.getElementById("grafContra").getContext("2d");
+      grafContra = new Chart(ctxC, {
+        type: "line",
+        data: {
+          labels: xj,
+          datasets: [
+            { label: "Fluido Quente", data: quenteC, borderWidth: 2, tension: 0.2, borderColor: "rgb(220,53,69)", backgroundColor: "rgba(220,53,69,0.05)" },
+            { label: "Fluido Frio",   data: frioC,   borderWidth: 2, tension: 0.2, borderColor: "rgb(13,110,253)", backgroundColor: "rgba(13,110,253,0.05)" }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'top' } },
+          scales: {
+            x: { title: { display: true, text: "Comprimento (m)" } },
+            y: { title: { display: true, text: "Temperatura (°C)" } }
+          }
+        }
+      });
+    } else {
+      if (grafContra) {
+        grafContra.destroy();
+        grafContra = null;
+      }
+    }
+  }
+
+  // ======= Eventos e inicialização =======
+
+  // Quando qualquer input mudar, recalcula e atualiza gráficos
+  document.querySelectorAll('input').forEach(i =>
+    i.addEventListener('input', () => {
+      // sincroniza pré-visualizações amarelas
+      if (i.id === "C11") {
+        document.getElementById("C11_out").textContent = i.value;
+        document.getElementById("C11_out1").textContent = i.value;
+      }
+      if (i.id === "C12") {
+        document.getElementById("C12_out").textContent = i.value;
+        document.getElementById("C12_out1").textContent = i.value;
+      }
+      if (i.id === "C13") {
+        document.getElementById("C13_out").textContent = i.value;
+        document.getElementById("C13_out1").textContent = i.value;
+      }
+
+      calcular();
+      atualizarGraficos();
+    })
+  );
+
+  // Botões
   document.getElementById('calcBtn').addEventListener('click', e => {
     e.preventDefault();
     calcular();
+    atualizarGraficos();
   });
 
   document.getElementById('resetBtn').addEventListener('click', e => {
@@ -260,42 +398,20 @@
     location.reload();
   });
 
-  document.querySelectorAll('input').forEach(i =>
-    i.addEventListener('input', () => calcular())
-  );
+  // Inicializa pré-visualizações amarelas com valores iniciais
+  document.getElementById("C11_out").textContent = document.getElementById("C11").value;
+  document.getElementById("C11_out1").textContent = document.getElementById("C11").value;
 
-document.getElementById("C11").addEventListener("input", function() {
-    document.getElementById("C11_out").textContent = this.value;
-});
+  document.getElementById("C12_out").textContent = document.getElementById("C12").value;
+  document.getElementById("C12_out1").textContent = document.getElementById("C12").value;
 
-document.getElementById("C11").addEventListener("input", function() {
-    document.getElementById("C11_out1").textContent = this.value;
-});
+  document.getElementById("C13_out").textContent = document.getElementById("C13").value;
+  document.getElementById("C13_out1").textContent = document.getElementById("C13").value;
 
-
-document.getElementById("C12").addEventListener("input", function() {
-    document.getElementById("C12_out").textContent = this.value;
-});
-
-document.getElementById("C12").addEventListener("input", function() {
-    document.getElementById("C12_out1").textContent = this.value;
-});
-
-
-document.getElementById("C13").addEventListener("input", function() {
-    document.getElementById("C13_out").textContent = this.value;
-});
-
-document.getElementById("C13").addEventListener("input", function() {
-    document.getElementById("C13_out1").textContent = this.value;
-});
-
-
-
-
-
-
+  // Primeira execução
   calcular();
+  atualizarGraficos();
+
 </script>
 
 </body>
